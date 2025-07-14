@@ -17,6 +17,7 @@ class LLMService:
 
         self.client = Groq(api_key=my_config.groq_api_key)
         self.model = "llama-3.3-70b-versatile"
+        self.conversation_history = []
 
         logger.info("LLM service initialized")
 
@@ -28,18 +29,24 @@ class LLMService:
 
             # Create system prompt
             system_prompt = self._create_system_prompt()
+            messages = [{"role": "system", "content": system_prompt}]
+
+            # Add last 6 messages (3 exchanges) for context
+            for entry in self.conversation_history[-6:]:
+                messages.append({"role": "user", "content": entry["user"]})
+                messages.append({"role": "assistant", "content": entry["assistant"]})
+
+            # Add current user message
+            messages.append({"role": "user", "content": command})
 
             # Send to LLM
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": command}
-                ],
+                messages=messages,
                 functions=functions,
                 function_call="auto",
                 temperature=0.1,
-                max_tokens=4000
+                max_tokens=10000
             )
 
             message = response.choices[0].message
@@ -56,22 +63,32 @@ class LLMService:
                     function_name, function_args, device_manager, weather_service, news_service
                 )
 
-                # Generate natural response
+                # Generate natural response with conversation history
                 follow_up = self.client.chat.completions.create(
                     model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": command},
+                    messages=messages + [
                         {"role": "assistant", "content": "", "function_call": message.function_call},
                         {"role": "function", "name": function_name, "content": function_result}
                     ],
                     temperature=0.3,
-                    max_tokens=2000
+                    max_tokens=10000
                 )
 
-                return follow_up.choices[0].message.content
+                final_response = follow_up.choices[0].message.content
             else:
-                return message.content
+                final_response = message.content
+
+            # Save conversation to history
+            self.conversation_history.append({
+                "user": command,
+                "assistant": final_response
+            })
+
+            # Keep only last 20 conversations
+            if len(self.conversation_history) > 20:
+                self.conversation_history = self.conversation_history[-20:]
+
+            return final_response
 
         except Exception as e:
             logger.error(f"Error processing command: {e}")
@@ -90,6 +107,21 @@ DEVICE CAPABILITIES:
 - Lamps: turn on/off, set brightness (0-100%), change colors (white, red, blue, green, yellow, purple, orange)
 - ACs: turn on/off, set temperature (16-30°C), change modes (cool, heat, fan, auto, dry), set fan speed (low, medium, high, auto)
 - TVs: turn on/off, change channels (1-999), set volume (0-100%), change inputs (hdmi1, hdmi2, hdmi3, usb, cable, antenna, netflix, youtube)
+
+CONVERSATION AWARENESS:
+- You can see the conversation history above
+- If the user's current message seems incomplete or related to previous messages, use context to understand what they want
+- For example:
+  * If you asked "Which city?" and user says "Tehran", get weather for Tehran
+  * If you asked "Which room?" and user says "kitchen", control the kitchen device
+  * If user says just "22" or "22 degrees" after temperature question, set temperature to 22
+  * If user says just a city name after weather question, get weather for that city
+  * If user says just a room name after device question, control device in that room
+  * If user says "yes" check your previous conversation and check what user was referring to
+
+- Look at the conversation history to understand incomplete responses
+- If user gives incomplete info and there's no context, ask for clarification naturally
+- If user asks for news show it completely 
 
 AVAILABLE FUNCTIONS:
 - control_device: Control any smart home device
