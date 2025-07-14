@@ -139,14 +139,7 @@ class CLIInterface:
     def _display_response(self, response: str, processing_time: float):
         """Display response with enhanced formatting"""
         print("🤖 Assistant / دستیار:")
-        print("┌" + "─" * 58 + "┐")
-
-        # Format response with proper line wrapping
-        lines = self._wrap_text(response, 56)
-        for line in lines:
-            print(f"│ {line:<56} │")
-
-        print("└" + "─" * 58 + "┘")
+        print(response)
         print(f"⏱️  Processed in {processing_time:.2f}s")
 
     def _wrap_text(self, text: str, width: int) -> list:
@@ -231,7 +224,7 @@ class CLIInterface:
             timestamp = time.strftime("%H:%M:%S", time.localtime(conv["timestamp"]))
             print(f"\n{i}. [{timestamp}]")
             print(f"   You: {conv['user_input']}")
-            response_preview = conv['response'][:100] + "..." if len(conv['response']) > 100 else conv['response']
+            response_preview = conv['response']
             print(f"   Assistant: {response_preview}")
 
     def _run_service_test(self):
