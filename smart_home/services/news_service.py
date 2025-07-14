@@ -1,7 +1,7 @@
 import requests
 import logging
 from typing import Optional
-from smart_home.config import config
+from smart_home.config.app_config import my_config
 
 logger = logging.getLogger(__name__)
 
@@ -11,10 +11,10 @@ class NewsService:
 
     def __init__(self):
         """Initialize news service"""
-        self.api_key = config.news_api_key
+        self.api_key = my_config.news_api_key
         self.api_url = "https://newsapi.org/v2/top-headlines"
 
-        if config.is_news_configured():
+        if my_config.is_news_configured():
             logger.info("News service initialized")
         else:
             logger.warning("News API key not configured")

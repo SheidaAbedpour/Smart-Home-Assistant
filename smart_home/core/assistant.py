@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any, Optional
-from smart_home.config import config
+from smart_home.config.app_config import my_config
 from smart_home.devices.device_manager import DeviceManager
 from smart_home.services.llm_service import LLMService
 from smart_home.services.weather_service import WeatherService
@@ -27,7 +27,7 @@ class SmartHomeAssistant:
         logger.info("Initializing Smart Home Assistant...")
 
         # Validate configuration
-        if not config.is_groq_configured():
+        if not my_config.is_groq_configured():
             raise ValueError(
                 "❌ GROQ_API_KEY not found in environment variables.\n"
                 "Please:\n"
@@ -55,8 +55,8 @@ class SmartHomeAssistant:
             self.llm_service = LLMService()
 
             print("🔄 Setting up external services...")
-            self.weather_service = WeatherService() if config.is_weather_configured() else None
-            self.news_service = NewsService() if config.is_news_configured() else None
+            self.weather_service = WeatherService() if my_config.is_weather_configured() else None
+            self.news_service = NewsService() if my_config.is_news_configured() else None
 
             print("🔄 Initializing Persian language support...")
             self.persian_service = PersianService(self.llm_service)
@@ -74,9 +74,9 @@ class SmartHomeAssistant:
         # Device summary
         device_count = len(self.device_manager.get_all_devices())
         print(f"📱 Devices: {device_count} smart devices loaded")
-        print(f"   💡 Lamps: {len(config.lamps)} locations")
-        print(f"   ❄️  ACs: {len(config.acs)} locations")
-        print(f"   📺 TVs: {len(config.tvs)} locations")
+        print(f"   💡 Lamps: {len(my_config.lamps)} locations")
+        print(f"   ❄️  ACs: {len(my_config.acs)} locations")
+        print(f"   📺 TVs: {len(my_config.tvs)} locations")
 
         # Language support
         print(f"🌍 Languages: English + Persian (automatic detection)")
@@ -202,9 +202,9 @@ class SmartHomeAssistant:
                 },
                 "languages": ["English", "Persian"],
                 "configuration": {
-                    "default_city": config.default_city,
-                    "debug_mode": config.debug,
-                    "log_level": config.log_level
+                    "default_city": my_config.default_city,
+                    "debug_mode": my_config.debug,
+                    "log_level": my_config.log_level
                 }
             }
 

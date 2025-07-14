@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, List, Optional
-from smart_home.config import config
+from smart_home.config.app_config import my_config
 from smart_home.devices.lamp import SmartLamp
 from smart_home.devices.air_conditioner import SmartAirConditioner
 from smart_home.devices.television import SmartTelevision
@@ -20,17 +20,17 @@ class DeviceManager:
     def _create_devices(self):
         """Create all devices from configuration"""
         # Create lamps
-        for location in config.lamps:
+        for location in my_config.lamps:
             device_id = f"{location.lower().replace(' ', '_')}_lamp"
             self.devices[device_id] = SmartLamp(location)
 
         # Create ACs
-        for location in config.acs:
+        for location in my_config.acs:
             device_id = f"{location.lower().replace(' ', '_')}_ac"
             self.devices[device_id] = SmartAirConditioner(location)
 
         # Create TVs
-        for location in config.tvs:
+        for location in my_config.tvs:
             device_id = f"{location.lower().replace(' ', '_')}_tv"
             self.devices[device_id] = SmartTelevision(location)
 

@@ -1,7 +1,7 @@
 import requests
 import logging
 from typing import Optional
-from smart_home.config import config
+from smart_home.config.app_config import my_config
 
 logger = logging.getLogger(__name__)
 
@@ -11,17 +11,17 @@ class WeatherService:
 
     def __init__(self):
         """Initialize weather service"""
-        self.api_key = config.weather_api_key
+        self.api_key = my_config.weather_api_key
         self.api_url = "http://api.openweathermap.org/data/2.5/weather"
 
-        if config.is_weather_configured():
+        if my_config.is_weather_configured():
             logger.info("Weather service initialized")
         else:
             logger.warning("Weather API key not configured")
 
     def get_weather(self, city: str = None) -> str:
         """Get current weather information"""
-        city = city or config.default_city
+        city = city or my_config.default_city
 
         if not self.api_key:
             return ("❌ Weather API not configured. Please add WEATHER_API_KEY to your .env file.\n"

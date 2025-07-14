@@ -2,7 +2,7 @@ import json
 import logging
 from typing import Dict, List, Any
 from groq import Groq
-from smart_home.config import config
+from smart_home.config.app_config import my_config
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +12,10 @@ class LLMService:
 
     def __init__(self):
         """Initialize LLM service"""
-        if not config.is_groq_configured():
+        if not my_config.is_groq_configured():
             raise ValueError("Groq API key not configured")
 
-        self.client = Groq(api_key=config.groq_api_key)
+        self.client = Groq(api_key=my_config.groq_api_key)
         self.model = "llama-3.3-70b-versatile"
 
         logger.info("LLM service initialized")
@@ -82,9 +82,9 @@ class LLMService:
         return f"""You are a helpful smart home assistant that controls devices and provides information.
 
 AVAILABLE DEVICES:
-💡 Lamps in: {', '.join(config.lamps)}
-❄️ ACs in: {', '.join(config.acs)}  
-📺 TVs in: {', '.join(config.tvs)}
+💡 Lamps in: {', '.join(my_config.lamps)}
+❄️ ACs in: {', '.join(my_config.acs)}  
+📺 TVs in: {', '.join(my_config.tvs)}
 
 DEVICE CAPABILITIES:
 - Lamps: turn on/off, set brightness (0-100%), change colors (white, red, blue, green, yellow, purple, orange)
@@ -108,7 +108,7 @@ Always use the appropriate function for the user's request."""
 
     def _get_function_definitions(self) -> List[Dict]:
         """Get function definitions for LLM"""
-        all_locations = list(set(config.lamps + config.acs + config.tvs + ["all"]))
+        all_locations = list(set(my_config.lamps + my_config.acs + my_config.tvs + ["all"]))
 
         return [
             {
@@ -178,7 +178,7 @@ Always use the appropriate function for the user's request."""
             if function_name == "control_device":
                 return device_manager.control_device(**args)
             elif function_name == "get_weather":
-                city = args.get("city", config.default_city)
+                city = args.get("city", my_config.default_city)
                 return weather_service.get_weather(city) if weather_service else "❌ Weather service not available"
             elif function_name == "get_news":
                 category = args.get("category", "technology")

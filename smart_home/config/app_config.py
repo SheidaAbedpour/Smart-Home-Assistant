@@ -40,4 +40,4 @@ class Config:
 
 
 # Global config instance
-config = Config()
+my_config = Config()
