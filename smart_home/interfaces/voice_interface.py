@@ -5,6 +5,7 @@ import queue
 import time
 import logging
 import re
+import unicodedata
 from typing import Optional, Callable
 import whisper
 from gtts import gTTS
@@ -19,21 +20,22 @@ logger = logging.getLogger(__name__)
 
 class VoiceInterface:
     """
-    Complete voice interface for Smart Home Assistant
+    voice interface with comprehensive text cleaning for natural speech
 
     Features:
     - Wake word detection
     - Speech-to-text with Whisper
-    - Text-to-speech with gTTS
-    - Voice activity detection
+    - Advanced text cleaning for natural TTS
+    - Complete emoji removal using Unicode
+    - Smart number and measurement conversion
     - Multilingual support
     - Audio feedback prevention
     """
 
     def __init__(self, assistant: SmartHomeAssistant):
-        """Initialize voice interface"""
+        """Initialize enhanced voice interface"""
         self.assistant = assistant
-        self.wake_words = ["hey assistant", "hey"]
+        self.wake_words = ["hey assistant", "hey", "assistant"]
 
         # Audio settings
         self.sample_rate = 16000
@@ -43,7 +45,7 @@ class VoiceInterface:
         self.is_listening = False
         self.is_recording_command = False
         self.listening_paused = False
-        self.is_speaking = False  # NEW: Track when TTS is active
+        self.is_speaking = False
 
         # Audio processing
         self.audio_queue = queue.Queue()
@@ -53,21 +55,50 @@ class VoiceInterface:
         # Voice components
         self.whisper_model = None
         self.noise_level = 0.0
-        self.vad_threshold = 0.003  # LOWERED: More sensitive detection
+        self.vad_threshold = 0.003
 
         # Threading
         self.command_lock = threading.Lock()
 
+        # Initialize enhanced text cleaning
+        self._init_enhanced_cleaning()
+
         # Initialize components
         self._initialize_voice_components()
+
+    def _init_enhanced_cleaning(self):
+        """Initialize enhanced text cleaning system"""
+        # Comprehensive number to word mapping
+        self.ones = [
+            "", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+            "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+            "seventeen", "eighteen", "nineteen"
+        ]
+
+        self.tens = [
+            "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"
+        ]
+
+        # Persian digits to English
+        self.persian_to_english = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
+
+        # Device and location normalizations
+        self.device_normalizations = {
+            'AC': 'air conditioner', 'TV': 'television',
+            'Room 1': 'room one', 'Room 2': 'room two', 'Room 3': 'room three',
+            'Room1': 'room one', 'Room2': 'room two', 'Room3': 'room three',
+            'Living Room': 'living room', 'Dining Room': 'dining room',
+            'Kitchen': 'kitchen', 'Bathroom': 'bathroom', 'Bedroom': 'bedroom',
+            'WiFi': 'Wi-Fi', 'USB': 'U S B', 'HDMI': 'H D M I'
+        }
 
     def _initialize_voice_components(self):
         """Initialize voice recognition components"""
         try:
-            print("🔄 Loading voice components...")
+            print("🔄 Loading enhanced voice components...")
 
             # Initialize Whisper
-            print("   📥 Loading Whisper model (this may take a moment)...")
+            print("   📥 Loading Whisper model...")
             self.whisper_model = whisper.load_model("base")
             print("   ✅ Whisper model loaded")
 
@@ -82,7 +113,7 @@ class VoiceInterface:
             raise Exception(f"Failed to initialize voice components: {e}")
 
     def run(self):
-        """Start the voice interface"""
+        """Start the enhanced voice interface"""
         if not self.whisper_model:
             print("❌ Voice components not ready")
             return
@@ -105,8 +136,9 @@ class VoiceInterface:
             print("✅ Voice interface active!")
             print("👂 Listening for wake words...")
             print("💡 Say: 'Hey assistant' then give your command")
-            print("💡 Try: 'Hey assistant, turn on the kitchen lamp'")
-            print("💡 Or in Persian: 'Hey assistant, چراغ آشپزخانه را روشن کن'")
+            print("💡 Try: 'Hey assistant, what time is it?'")
+            print("💡 Or: 'Hey assistant, what's the weather?'")
+            print("💡 Persian: 'Hey assistant, چراغ آشپزخانه را روشن کن'")
             print("💡 Press Ctrl+C to stop")
             print("-" * 60)
 
@@ -122,14 +154,15 @@ class VoiceInterface:
             print(f"❌ Voice interface error: {e}")
 
     def _show_voice_welcome(self):
-        """Show voice interface welcome"""
+        """Show enhanced voice interface welcome"""
         print("\n" + "🎤" + "=" * 58 + "🎤")
-        print("          SMART HOME ASSISTANT - VOICE CONTROL")
+        print("     SMART HOME ASSISTANT - ENHANCED VOICE CONTROL")
         print("🎤" + "=" * 58 + "🎤")
         print("🌍 Multilingual Support: English + Persian")
         print("👂 Wake Words: " + ", ".join(f"'{w}'" for w in self.wake_words))
         print("🗣️  Speech-to-Text: OpenAI Whisper")
-        print("🔊 Text-to-Speech: Google TTS")
+        print("🔊 Text-to-Speech: Google TTS + Enhanced Cleaning")
+        print("🧹 Features: Complete emoji removal, smart number conversion")
         print("🎤" + "=" * 58 + "🎤")
 
     def _start_audio_stream(self):
@@ -141,7 +174,7 @@ class VoiceInterface:
 
                 audio_data = indata[:, 0] if len(indata.shape) > 1 else indata.flatten()
 
-                # FIXED: Don't process audio when speaking (prevents feedback)
+                # Don't process audio when speaking (prevents feedback)
                 if self.is_speaking:
                     return
 
@@ -152,8 +185,7 @@ class VoiceInterface:
                 # Only process for wake words when not paused
                 if not self.listening_paused:
                     max_vol = np.max(np.abs(audio_data))
-                    # DEBUGGING: Lower threshold for better sensitivity
-                    if max_vol > 0.002:  # Lowered from 0.005
+                    if max_vol > 0.002:
                         self.audio_queue.put(audio_data.copy())
 
             self.audio_stream = sd.InputStream(
@@ -178,7 +210,7 @@ class VoiceInterface:
                 # Get audio chunk with timeout
                 audio_chunk = self.audio_queue.get(timeout=1.0)
 
-                # FIXED: Skip processing if speaking
+                # Skip processing if speaking
                 if self.is_speaking:
                     continue
 
@@ -192,8 +224,7 @@ class VoiceInterface:
 
                 # Check for voice activity
                 if self._detect_voice_activity(audio_chunk):
-                    # Check for wake words if we have enough audio
-                    if len(self.audio_buffer) >= self.sample_rate * 2:  # 2 seconds
+                    if len(self.audio_buffer) >= self.sample_rate * 2:
                         self._check_for_wake_word()
 
             except queue.Empty:
@@ -202,9 +233,9 @@ class VoiceInterface:
                 logger.error(f"Audio processing error: {e}")
 
     def _detect_voice_activity(self, audio_chunk: np.ndarray) -> bool:
-        """Simple voice activity detection with debugging"""
+        """Voice activity detection"""
         try:
-            # FIXED: Don't detect voice when speaking
+            # Don't detect voice when speaking
             if self.is_speaking:
                 return False
 
@@ -217,15 +248,12 @@ class VoiceInterface:
             else:
                 self.noise_level = self.noise_level * 0.95 + volume * 0.05
 
-            # DEBUGGING: Lower threshold and add more verbose output
-            threshold = max(0.005, self.noise_level * 2)  # Lowered threshold
+            threshold = max(0.005, self.noise_level * 2)
             voice_detected = volume > threshold
 
             # DEBUGGING: Show more information
             if voice_detected:
-                print(f"🎤 Voice detected! Vol: {volume:.4f}, Threshold: {threshold:.4f}, Noise: {self.noise_level:.4f}")
-            elif volume > 0.001:  # Show quiet sounds too
-                print(f"🔇 Audio detected but below threshold: {volume:.4f} < {threshold:.4f}", end="\r", flush=True)
+                print(f"🎤 Voice detected! Vol: {volume:.4f}")
 
             return voice_detected
 
@@ -234,7 +262,7 @@ class VoiceInterface:
             return False
 
     def _check_for_wake_word(self):
-        """Check recent audio for wake words with debugging"""
+        """Check recent audio for wake words"""
         try:
             # Skip if already recording or speaking
             if self.is_recording_command or self.is_speaking:
@@ -242,7 +270,7 @@ class VoiceInterface:
 
             # Get recent audio (last 3 seconds)
             recent_samples = min(self.sample_rate * 3, len(self.audio_buffer))
-            if recent_samples < self.sample_rate:  # Need at least 1 second
+            if recent_samples < self.sample_rate:
                 return
 
             recent_audio = np.array(self.audio_buffer[-recent_samples:], dtype=np.float32)
@@ -261,7 +289,7 @@ class VoiceInterface:
 
             print(f"👂 Heard: '{text}'")
 
-            # DEBUGGING: More flexible wake word detection
+            # wake word detection
             text_words = text.split()
             for wake_word in self.wake_words:
                 wake_parts = wake_word.lower().split()
@@ -271,11 +299,6 @@ class VoiceInterface:
                     print(f"🎯 Wake word detected: '{wake_word}' in '{text}'")
                     self._handle_wake_word()
                     return
-
-                # Also check for partial matches
-                for part in wake_parts:
-                    if part in text and len(part) > 2:  # Only for meaningful parts
-                        print(f"⚠️ Partial wake word match: '{part}' found in '{text}'")
 
             print(f"❌ No wake word found in: '{text}'")
 
@@ -303,7 +326,7 @@ class VoiceInterface:
         self._pause_listening()
         self._speak("Yes?")
 
-        # FIXED: Wait for TTS to finish before resuming
+        # Wait for TTS to finish before resuming
         self._wait_for_speech_complete()
         self._resume_listening()
 
@@ -362,7 +385,7 @@ class VoiceInterface:
         finally:
             with self.command_lock:
                 self.is_recording_command = False
-                # FIXED: Wait for any TTS to complete before resuming
+                # Wait for any TTS to complete before resuming
                 self._wait_for_speech_complete()
                 print("✅ Ready for next wake word...")
 
@@ -372,7 +395,7 @@ class VoiceInterface:
             # Recognize speech
             result = self.whisper_model.transcribe(
                 audio_data,
-                language='en',  # Let Whisper auto-detect
+                language='en',
                 fp16=False,
                 temperature=0.0
             )
@@ -385,11 +408,14 @@ class VoiceInterface:
                 try:
                     response = self.assistant.process_command(command)
                     if response:
-                        print(f"🤖 Response: {response}")
+                        print(f"🤖 Original Response: {response}")
 
-                        # Clean response for TTS
-                        clean_response = self._clean_response_for_speech(response)
-                        self._speak(clean_response)
+                        # Speech cleaning
+                        is_persian = self.assistant.persian_service.is_persian(response)
+                        clean_response = self._clean_for_speech(response, is_persian)
+
+                        print(f"🧹 Cleaned for Speech: {clean_response}")
+                        self._speak(clean_response, is_persian)
                     else:
                         self._speak("Done.")
 
@@ -404,43 +430,330 @@ class VoiceInterface:
             logger.error(f"Command processing error: {e}")
             self._speak("Sorry, I had an error processing that.")
 
-    def _clean_response_for_speech(self, response: str) -> str:
-        """Clean response text for better TTS"""
-        # Remove excessive emojis and formatting
-        response = re.sub(r'[^\w\s.,!?()-]', '', response)
+    def _clean_for_speech(self, text: str, is_persian: bool = False) -> str:
+        """
+        Enhanced comprehensive text cleaning for natural speech synthesis
+        """
+        try:
+            if not text or not text.strip():
+                return ""
 
-        # Replace common patterns
-        response = response.replace('✅', 'Success:')
-        response = response.replace('❌', 'Error:')
-        response = response.replace('🔴', 'offline')
-        response = response.replace('🟢', 'online')
+            logger.debug(f"Cleaning text for speech: '{text}'")
 
-        # Clean up whitespace
-        response = re.sub(r'\s+', ' ', response).strip()
+            # Handle Persian text differently
+            if is_persian:
+                return self._clean_persian_text(text)
 
-        # Limit length for better TTS
-        if len(response) > 200:
-            response = response[:197] + "..."
+            cleaned = text
 
-        return response
+            # Step 1: Remove ALL emojis and symbols systematically
+            cleaned = self._remove_all_emojis_and_symbols(cleaned)
 
-    def _speak(self, text: str):
-        """Speak text using TTS with improved audio handling"""
+            # Step 2: Handle Persian digits in mixed text
+            cleaned = cleaned.translate(self.persian_to_english)
+
+            # Step 3: Normalize spacing and punctuation
+            cleaned = self._normalize_spacing_and_punctuation(cleaned)
+
+            # Step 4: Convert time formats
+            cleaned = self._convert_time_formats(cleaned)
+
+            # Step 5: Convert temperature and measurements
+            cleaned = self._convert_measurements(cleaned)
+
+            # Step 6: Convert percentages
+            cleaned = self._convert_percentages(cleaned)
+
+            # Step 7: Convert decimal numbers
+            cleaned = self._convert_decimal_numbers(cleaned)
+
+            # Step 8: Convert whole numbers
+            cleaned = self._convert_whole_numbers(cleaned)
+
+            # Step 9: Expand abbreviations and device names
+            cleaned = self._expand_abbreviations_and_devices(cleaned)
+
+            # Step 10: Handle remaining special characters
+            cleaned = self._handle_special_characters(cleaned)
+
+            # Step 11: Final cleanup and validation
+            cleaned = self._final_cleanup(cleaned)
+
+            # Log the transformation if significant
+            if len(cleaned) < len(text) * 0.8:  # If we removed > 20%
+                logger.info(f"Text significantly cleaned: '{text}' → '{cleaned}'")
+
+            return cleaned
+
+        except Exception as e:
+            logger.error(f"Error in enhanced text cleaning: {e}")
+            # Fallback: basic cleaning
+            return self._basic_fallback_cleaning(text)
+
+    def _remove_all_emojis_and_symbols(self, text: str) -> str:
+        """Remove ALL emojis and unwanted symbols using comprehensive Unicode ranges"""
+        # Comprehensive emoji removal using Unicode blocks
+        emoji_pattern = re.compile(
+            "["
+            "\U0001F600-\U0001F64F"  # emoticons
+            "\U0001F300-\U0001F5FF"  # symbols & pictographs
+            "\U0001F680-\U0001F6FF"  # transport & map symbols
+            "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+            "\U0001F900-\U0001F9FF"  # supplemental symbols
+            "\U00002600-\U000026FF"  # miscellaneous symbols
+            "\U00002700-\U000027BF"  # dingbats
+            "\U0000FE00-\U0000FE0F"  # variation selectors
+            "\U0001F200-\U0001F2FF"  # enclosed characters
+            "\U00003030"  # wavy dash
+            "\U0001F004"  # mahjong tile
+            "\U0001F0CF"  # playing card
+            "]+",
+            flags=re.UNICODE
+        )
+
+        text = emoji_pattern.sub(' ', text)
+
+        # Remove additional problematic symbols
+        text = re.sub(r'[✅❌⭐⚡▶️⏹️⏸️⏯️⏭️⏮️⏬⏫🔄🔃🔂🔁🔀↩️↪️⤴️⤵️]', ' ', text)
+
+        # Keep only letters, numbers, basic punctuation, and essential symbols
+        text = re.sub(r'[^\w\s.,!?:;()\-\'"°%&+=/]', ' ', text)
+
+        return text
+
+    def _normalize_spacing_and_punctuation(self, text: str) -> str:
+        """Normalize spacing and punctuation"""
+        # Fix spacing around punctuation
+        text = re.sub(r'\s*([.,!?:;])\s*', r'\1 ', text)
+
+        # Remove multiple consecutive punctuation
+        text = re.sub(r'[.,!?:;]{2,}', '.', text)
+
+        # Normalize multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+
+        return text.strip()
+
+    def _convert_time_formats(self, text: str) -> str:
+        """Convert time formats to speech-friendly versions"""
+
+        def time_replacer(match):
+            hour = int(match.group(1))
+            minute = int(match.group(2))
+            period = match.group(3) if match.group(3) else ""
+
+            hour_word = self._number_to_words(hour)
+
+            if minute == 0:
+                minute_part = ""
+            elif minute < 10:
+                minute_part = f" oh {self._number_to_words(minute)}"
+            else:
+                minute_part = f" {self._number_to_words(minute)}"
+
+            period_part = f" {period.upper()}" if period else ""
+
+            return f"{hour_word}{minute_part}{period_part}"
+
+        # Match time patterns
+        text = re.sub(r'(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?', time_replacer, text)
+        return text
+
+    def _convert_measurements(self, text: str) -> str:
+        """Convert temperatures and measurements"""
+
+        def temp_replacer(match):
+            value = match.group(1)
+            unit = match.group(2)
+
+            value_words = self._convert_number_string(value)
+
+            if unit.upper() == 'C':
+                unit_name = "degrees Celsius"
+            elif unit.upper() == 'F':
+                unit_name = "degrees Fahrenheit"
+            else:
+                unit_name = f"degrees {unit}"
+
+            return f"{value_words} {unit_name}"
+
+        # Temperature patterns
+        text = re.sub(r'([\d.]+)°([CFcf])', temp_replacer, text)
+
+        return text
+
+    def _convert_percentages(self, text: str) -> str:
+        """Convert percentages to words"""
+
+        def percent_replacer(match):
+            number = match.group(1)
+            number_words = self._convert_number_string(number)
+            return f"{number_words} percent"
+
+        text = re.sub(r'([\d.]+)\s*%', percent_replacer, text)
+        return text
+
+    def _convert_decimal_numbers(self, text: str) -> str:
+        """Convert decimal numbers to words"""
+
+        def decimal_replacer(match):
+            return self._convert_number_string(match.group(1))
+
+        text = re.sub(r'\b(\d+\.\d+)\b', decimal_replacer, text)
+        return text
+
+    def _convert_whole_numbers(self, text: str) -> str:
+        """Convert reasonable whole numbers to words"""
+
+        def number_replacer(match):
+            number = int(match.group(1))
+            # Only convert reasonable numbers (not IDs, years, etc.)
+            if 1 <= number <= 100:
+                return self._number_to_words(number)
+            return str(number)
+
+        text = re.sub(r'\b(\d{1,3})\b', number_replacer, text)
+        return text
+
+    def _expand_abbreviations_and_devices(self, text: str) -> str:
+        """Expand abbreviations and device names"""
+        # Time abbreviations
+        text = re.sub(r'\bAM\b', 'A M', text, flags=re.IGNORECASE)
+        text = re.sub(r'\bPM\b', 'P M', text, flags=re.IGNORECASE)
+
+        # Device normalizations
+        for device, normalized in self.device_normalizations.items():
+            pattern = rf'\b{re.escape(device)}\b'
+            text = re.sub(pattern, normalized, text, flags=re.IGNORECASE)
+
+        return text
+
+    def _handle_special_characters(self, text: str) -> str:
+        """Handle remaining special characters"""
+        replacements = {
+            '&': ' and ',
+            '+': ' plus ',
+            '=': ' equals ',
+            '/': ' slash ',
+            '@': ' at '
+        }
+
+        for symbol, word in replacements.items():
+            text = text.replace(symbol, word)
+
+        return text
+
+    def _final_cleanup(self, text: str) -> str:
+        """Final cleanup and validation"""
+        # Remove extra spaces
+        text = re.sub(r'\s+', ' ', text)
+        text = text.strip()
+
+        # Ensure proper sentence ending
+        if text and not text.endswith(('.', '!', '?')):
+            text += '.'
+
+        # Limit length for TTS (prevent very long responses)
+        if len(text) > 300:
+            sentences = text.split('.')
+            result = ""
+            for sentence in sentences:
+                if len(result + sentence) < 280:
+                    result += sentence + "."
+                else:
+                    break
+            text = result.rstrip('.') + '.'
+
+        return text
+
+    def _convert_number_string(self, num_str: str) -> str:
+        """Convert number string to words"""
+        try:
+            if '.' in num_str:
+                whole, decimal = num_str.split('.')
+                whole_words = self._number_to_words(int(whole))
+                decimal_words = ' '.join(self._number_to_words(int(d)) for d in decimal)
+                return f"{whole_words} point {decimal_words}"
+            else:
+                return self._number_to_words(int(num_str))
+        except (ValueError, IndexError):
+            return num_str
+
+    def _number_to_words(self, number: int) -> str:
+        """Convert integer to words"""
+        if number == 0:
+            return "zero"
+
+        if number < 0:
+            return f"negative {self._number_to_words(abs(number))}"
+
+        if number < 20:
+            return self.ones[number]
+
+        if number < 100:
+            tens_digit = number // 10
+            ones_digit = number % 10
+            if ones_digit == 0:
+                return self.tens[tens_digit]
+            else:
+                return f"{self.tens[tens_digit]} {self.ones[ones_digit]}"
+
+        if number < 1000:
+            hundreds_digit = number // 100
+            remainder = number % 100
+            result = f"{self.ones[hundreds_digit]} hundred"
+            if remainder > 0:
+                result += f" {self._number_to_words(remainder)}"
+            return result
+
+        # For larger numbers, return as string
+        return str(number)
+
+    def _clean_persian_text(self, text: str) -> str:
+        """Clean Persian text for TTS"""
+        # Convert Persian digits
+        text = text.translate(self.persian_to_english)
+
+        # Remove emojis but preserve Persian characters
+        persian_pattern = re.compile(
+            r'[^\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF'
+            r'\w\s.,!?()\'"-]+'
+        )
+        text = persian_pattern.sub(' ', text)
+
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+
+    def _basic_fallback_cleaning(self, text: str) -> str:
+        """Basic fallback if main cleaning fails"""
+        text = re.sub(r'[^\w\s.,!?()-]', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        if text and not text.endswith(('.', '!', '?')):
+            text += '.'
+
+        return text
+
+    def _speak(self, text: str, is_persian: bool = False):
+        """Speak text using TTS with enhanced cleaning"""
         if not text.strip():
             return
 
         try:
-            # FIXED: Set speaking flag to prevent audio feedback
+            # Set speaking flag to prevent audio feedback
             self.is_speaking = True
             print(f"🗣️ Speaking: '{text}'")
 
-            # Detect language for TTS
-            lang = 'fa' if self.assistant.persian_service.is_persian(text) else 'en'
+            # Auto-detect language if not specified
+            if not is_persian:
+                is_persian = self.assistant.persian_service.is_persian(text)
+
+            lang = 'fa' if is_persian else 'en'
 
             # Create TTS
-            tts = gTTS(text=text, lang=lang)
+            tts = gTTS(text=text, lang=lang, slow=False)
 
-            # FIXED: Better temporary file handling
+            # Temporary file handling
             temp_path = None
             try:
                 # Create temporary file
@@ -448,7 +761,7 @@ class VoiceInterface:
                     temp_path = temp_file.name
                     tts.save(temp_path)
 
-                # FIXED: Stop any previous audio before playing new
+                # Stop any previous audio before playing new
                 pygame.mixer.music.stop()
                 time.sleep(0.1)  # Brief pause
 
@@ -461,7 +774,7 @@ class VoiceInterface:
                     pygame.time.Clock().tick(10)
 
             finally:
-                # FIXED: Cleanup with retry logic
+                # Cleanup with retry logic
                 if temp_path and os.path.exists(temp_path):
                     try:
                         # Ensure audio is stopped
@@ -480,8 +793,7 @@ class VoiceInterface:
             logger.error(f"TTS error: {e}")
             print(f"❌ Could not speak response: {e}")
         finally:
-            # FIXED: Always clear speaking flag and add buffer time
-            time.sleep(0.5)  # Buffer time to prevent immediate audio pickup
+            time.sleep(0.5)
             self.is_speaking = False
 
     def _wait_for_speech_complete(self):
@@ -530,7 +842,7 @@ class VoiceInterface:
             'speaking': self.is_speaking,
             'wake_words': self.wake_words,
             'buffer_size': len(self.audio_buffer),
-            'audio_queue_size': self.audio_queue.qsize(),
             'noise_level': self.noise_level,
+            'enhanced_cleaning': True,
             'whisper_loaded': self.whisper_model is not None
         }
