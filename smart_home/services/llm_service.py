@@ -24,6 +24,8 @@ class LLMService:
     def process_command(self, command: str, device_manager, weather_service=None, news_service=None) -> str:
         """Process user command using LLM with function calling"""
         try:
+            logger.info(f"🧠 LLM processing command: '{command}'")
+
             # Get available functions
             functions = self._get_function_definitions()
 
@@ -39,6 +41,8 @@ class LLMService:
             # Add current user message
             messages.append({"role": "user", "content": command})
 
+            logger.info(f"🔧 Calling Groq API with {len(messages)} messages")
+
             # Send to LLM
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -46,22 +50,33 @@ class LLMService:
                 functions=functions,
                 function_call="auto",
                 temperature=0.1,
-                max_tokens=10000
+                max_tokens=2000,
+                timeout=30
             )
 
             message = response.choices[0].message
+            logger.info(f"📨 LLM response received, has function call: {bool(message.function_call)}")
 
-            if message.function_call:
-                # Execute function
+            # Check if response contains function call text (Groq bug workaround)
+            if message.content and '<function=' in message.content:
+                logger.info("🔧 Detected function call in text format, parsing...")
+                final_response = self._parse_and_execute_function_from_text(
+                    message.content, device_manager, weather_service, news_service
+                )
+                logger.info(f"🎯 Parsed function response: '{final_response}'")
+            elif message.function_call:
+                # Execute function (normal case)
                 function_name = message.function_call.name
                 function_args = json.loads(message.function_call.arguments)
 
-                logger.info(f"Executing function: {function_name} with args: {function_args}")
+                logger.info(f"🔧 Executing function: {function_name} with args: {function_args}")
 
                 # Execute the function
                 function_result = self._execute_function(
                     function_name, function_args, device_manager, weather_service, news_service
                 )
+
+                logger.info(f"⚙️ Function result: {function_result}")
 
                 # Generate natural response with conversation history
                 follow_up = self.client.chat.completions.create(
@@ -71,12 +86,30 @@ class LLMService:
                         {"role": "function", "name": function_name, "content": function_result}
                     ],
                     temperature=0.3,
-                    max_tokens=10000
+                    max_tokens=2000,
+                    timeout=30
                 )
 
                 final_response = follow_up.choices[0].message.content
+                logger.info(f"🎯 Final LLM response: '{final_response}' (length: {len(final_response)})")
             else:
                 final_response = message.content
+                logger.info(f"💬 Direct LLM response: '{final_response}' (length: {len(final_response)})")
+
+                # Additional check for function calls in content
+                if final_response and '<function=' in final_response:
+                    logger.info("🔧 Found function call in direct response, parsing...")
+                    final_response = self._parse_and_execute_function_from_text(
+                        final_response, device_manager, weather_service, news_service
+                    )
+
+            # Validate response
+            if not final_response:
+                logger.warning("⚠️ LLM returned empty response")
+                final_response = "I processed your request, but didn't generate a response. Please try again."
+            elif len(final_response.strip()) == 0:
+                logger.warning("⚠️ LLM returned whitespace-only response")
+                final_response = "I received your command but my response was empty. Please try again."
 
             # Save conversation to history
             self.conversation_history.append({
@@ -88,11 +121,66 @@ class LLMService:
             if len(self.conversation_history) > 20:
                 self.conversation_history = self.conversation_history[-20:]
 
+            logger.info(f"✅ Returning response of length {len(final_response)}")
             return final_response
 
         except Exception as e:
-            logger.error(f"Error processing command: {e}")
+            logger.error(f"❌ Error processing command: {e}")
+            import traceback
+            traceback.print_exc()
             return f"❌ Error processing command: {str(e)}"
+
+    def _parse_and_execute_function_from_text(self, text_response: str, device_manager, weather_service,
+                                              news_service) -> str:
+        """Parse function calls from text and execute them (Groq workaround)"""
+        try:
+            import re
+
+            # Extract function calls from text like <function=control_device{"device_type": "lamp", "action": "on", "location": "room 1"}</function>
+            function_pattern = r'<function=([^{]+)(\{[^}]+\})</function>'
+            matches = re.findall(function_pattern, text_response)
+
+            if not matches:
+                logger.warning("No function calls found in text")
+                return "I understood your request but couldn't execute it properly."
+
+            # Process the first function call
+            function_name, function_args_str = matches[0]
+            logger.info(f"🔧 Parsing function: {function_name} with args: {function_args_str}")
+
+            # Clean up the function name
+            function_name = function_name.strip()
+
+            # Parse the JSON arguments
+            try:
+                function_args = json.loads(function_args_str)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse function arguments: {e}")
+                return "I understood your request but couldn't parse the parameters properly."
+
+            # Execute the function
+            function_result = self._execute_function(
+                function_name, function_args, device_manager, weather_service, news_service
+            )
+
+            logger.info(f"⚙️ Function execution result: {function_result}")
+
+            # Return a natural response based on the function result
+            if function_name == "control_device":
+                if "turned on" in function_result.lower():
+                    return f"✅ {function_result}"
+                elif "turned off" in function_result.lower():
+                    return f"🔌 {function_result}"
+                elif "set to" in function_result.lower():
+                    return f"⚙️ {function_result}"
+                else:
+                    return function_result
+            else:
+                return function_result
+
+        except Exception as e:
+            logger.error(f"Error parsing function from text: {e}")
+            return f"I understood your request but encountered an error: {str(e)}"
 
     def _create_system_prompt(self) -> str:
         """Create system prompt for the assistant"""
@@ -107,6 +195,14 @@ DEVICE CAPABILITIES:
 - Lamps: turn on/off, set brightness (0-100%), change colors (white, red, blue, green, yellow, purple, orange)
 - ACs: turn on/off, set temperature (16-30°C), change modes (cool, heat, fan, auto, dry), set fan speed (low, medium, high, auto)
 - TVs: turn on/off, change channels (1-999), set volume (0-100%), change inputs (hdmi1, hdmi2, hdmi3, usb, cable, antenna, netflix, youtube)
+
+IMPORTANT INSTRUCTIONS:
+- ALWAYS provide a clear, complete response
+- Be specific about what action was taken
+- Use emojis to make responses friendly
+- If controlling devices, confirm the action taken
+- Keep responses conversational but informative
+- NEVER give partial or incomplete responses
 
 CONVERSATION AWARENESS:
 - You can see the conversation history above
@@ -135,6 +231,7 @@ RESPONSE STYLE:
 - Use appropriate emojis
 - Provide clear confirmations
 - If user asks to adjust after weather, make smart suggestions
+- ALWAYS complete your thoughts and responses
 
 Always use the appropriate function for the user's request."""
 
@@ -207,26 +304,41 @@ Always use the appropriate function for the user's request."""
     def _execute_function(self, function_name: str, args: Dict, device_manager, weather_service, news_service) -> str:
         """Execute the specified function"""
         try:
+            logger.info(f"🔧 Executing function: {function_name}")
+
             if function_name == "control_device":
-                return device_manager.control_device(**args)
+                result = device_manager.control_device(**args)
+                logger.info(f"🏠 Device control result: {result}")
+                return result
             elif function_name == "get_weather":
                 city = args.get("city", my_config.default_city)
-                return weather_service.get_weather(city) if weather_service else "❌ Weather service not available"
+                result = weather_service.get_weather(city) if weather_service else "❌ Weather service not available"
+                logger.info(f"🌤️ Weather result: {result}")
+                return result
             elif function_name == "get_news":
                 category = args.get("category", "technology")
-                return news_service.get_news(category) if news_service else "❌ News service not available"
+                result = news_service.get_news(category) if news_service else "❌ News service not available"
+                logger.info(f"📰 News result: {result}")
+                return result
             elif function_name == "get_time":
                 from smart_home.services.time_service import TimeService
-                return TimeService.get_current_time()
+                result = TimeService.get_current_time()
+                logger.info(f"🕒 Time result: {result}")
+                return result
             elif function_name == "get_device_status":
                 device = args.get("device", "all")
-                return device_manager.get_status(device)
+                result = device_manager.get_status(device)
+                logger.info(f"📊 Status result: {result}")
+                return result
             else:
-                return f"❌ Unknown function: {function_name}"
+                error_msg = f"❌ Unknown function: {function_name}"
+                logger.error(error_msg)
+                return error_msg
 
         except Exception as e:
-            logger.error(f"Error executing {function_name}: {e}")
-            return f"❌ Error executing {function_name}: {str(e)}"
+            error_msg = f"❌ Error executing {function_name}: {str(e)}"
+            logger.error(error_msg)
+            return error_msg
 
     def translate_text(self, text: str, target_language: str) -> str:
         """Translate text using LLM"""
@@ -256,8 +368,9 @@ IMPORTANT: Output ONLY the English translation."""
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": text}
                 ],
-                temperature=0.1,
-                max_tokens=300
+                temperature=0.3,
+                max_tokens=2000,
+                timeout=15
             )
 
             return response.choices[0].message.content.strip()

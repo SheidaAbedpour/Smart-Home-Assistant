@@ -7,7 +7,7 @@ import logging
 from smart_home.core.assistant import SmartHomeAssistant
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Create FastAPI app
@@ -20,11 +20,7 @@ app = FastAPI(
 # Allow requests from Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-    ],
+    allow_origins=["*"],  # Allow all origins for local development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,28 +62,58 @@ async def root():
 async def process_command(request: CommandRequest):
     """Process natural language command"""
     if not assistant:
+        logger.error("Assistant not initialized")
         raise HTTPException(status_code=500, detail="Assistant not initialized")
 
     try:
-        logger.info(f"Processing command: {request.command}")
+        logger.info(f"🎤 Received command: '{request.command}'")
+        logger.info(f"📝 Command length: {len(request.command)} characters")
 
         # Use your existing assistant
+        logger.info("🧠 Processing with assistant...")
         response = assistant.process_command(request.command)
+
+        logger.info(f"🤖 Assistant response: '{response}'")
+        logger.info(f"📏 Response length: {len(response) if response else 0} characters")
+        logger.info(f"🔍 Response type: {type(response)}")
+
+        # Check if response is None or empty
+        if response is None:
+            logger.warning("⚠️ Assistant returned None")
+            response = "Assistant returned no response"
+        elif response == "":
+            logger.warning("⚠️ Assistant returned empty string")
+            response = "Assistant returned empty response"
 
         # Detect language
         is_persian = assistant.persian_service.is_persian(request.command)
+        detected_language = "persian" if is_persian else "english"
 
-        return CommandResponse(
-            response=response,
+        logger.info(f"🌍 Detected language: {detected_language}")
+
+        # Create response object
+        response_obj = CommandResponse(
+            response=str(response),  # Ensure it's a string
             success=True,
-            language_detected="persian" if is_persian else "english"
+            language_detected=detected_language
         )
+
+        logger.info(f"📤 Sending response: {response_obj.dict()}")
+
+        return response_obj
+
     except Exception as e:
-        logger.error(f"Error processing command: {e}")
-        return CommandResponse(
+        logger.error(f"❌ Error processing command '{request.command}': {e}")
+        import traceback
+        traceback.print_exc()
+
+        error_response = CommandResponse(
             response=f"Error: {str(e)}",
             success=False
         )
+
+        logger.info(f"📤 Sending error response: {error_response.dict()}")
+        return error_response
 
 
 @app.get("/api/devices")
@@ -97,7 +123,9 @@ async def get_all_devices():
         raise HTTPException(status_code=500, detail="Assistant not initialized")
 
     try:
+        logger.info("📱 Getting all devices...")
         all_devices = assistant.device_manager.get_all_devices()
+        logger.info(f"📱 Found {len(all_devices)} devices")
 
         devices = {
             "lamps": [],
@@ -138,6 +166,8 @@ async def get_all_devices():
                 })
                 devices["tvs"].append(device_info)
 
+        logger.info(
+            f"📱 Returning devices: {len(devices['lamps'])} lamps, {len(devices['acs'])} ACs, {len(devices['tvs'])} TVs")
         return devices
 
     except Exception as e:
@@ -152,15 +182,17 @@ async def toggle_device(device_id: str):
         raise HTTPException(status_code=500, detail="Assistant not initialized")
 
     try:
+        logger.info(f"🔄 Toggling device: {device_id}")
         device = assistant.device_manager.get_device(device_id)
         if not device:
+            logger.warning(f"⚠️ Device not found: {device_id}")
             return {
                 "success": False,
                 "message": f"Device {device_id} not found"
             }
 
         result = device.toggle()
-        logger.info(f"Toggled device {device_id}: {result}")
+        logger.info(f"✅ Device {device_id} toggled: {result}")
 
         return {
             "success": True,
@@ -191,10 +223,10 @@ async def get_system_status():
 if __name__ == "__main__":
     import uvicorn
 
-    print("\n🚀 Smart Home Assistant API Server")
-    print("=" * 50)
+    print("\n🚀 Smart Home Assistant API Server (Debug Version)")
+    print("=" * 60)
     print("🌐 API Server: http://localhost:8000")
     print("📚 API Docs: http://localhost:8000/docs")
-    print("=" * 50)
+    print("=" * 60)
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
