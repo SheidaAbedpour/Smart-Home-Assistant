@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 25%, #16213e 50%, #0f3460 75%, #533483 100%);
+            min-height: 100vh;
+            color: white;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .background-pattern {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background:
+                radial-gradient(circle at 20% 80%, rgba(79, 172, 254, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255, 107, 107, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(120, 119, 198, 0.12) 0%, transparent 50%),
+                radial-gradient(circle at 60% 70%, rgba(56, 189, 248, 0.08) 0%, transparent 50%);
+            z-index: -1;
+            animation: backgroundFloat 20s ease-in-out infinite;
+        }
+
+        @keyframes backgroundFloat {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            33% { transform: translateY(-10px) rotate(1deg); }
+            66% { transform: translateY(5px) rotate(-1deg); }
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.05); }
+        }
+
+        @keyframes messageSlide {
+            from {
+                opacity: 0;
+                transform: translateY(30px) scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(79, 172, 254, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(79, 172, 254, 0.6); }
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+            backdrop-filter: blur(25px);
+            border-radius: 35px;
+            padding: 45px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow:
+                0 25px 50px rgba(0, 0, 0, 0.25),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+            animation: shimmer 4s infinite;
+        }
+
+        .header::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, transparent, rgba(79, 172, 254, 0.1), transparent, rgba(255, 107, 107, 0.1), transparent);
+            animation: rotate 10s linear infinite;
+            z-index: -1;
+        }
+
+        .header h1 {
+            font-size: 3.8rem;
+            font-weight: 900;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 25%, #ff6b6b 50%, #4ecdc4 75%, #45b7d1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            letter-spacing: -2px;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+
+        .connection-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 20px;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .connected {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(34, 197, 94, 0.15));
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .error {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(220, 38, 38, 0.15));
+            color: #ff6b6b;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .language-toggle {
+            position: fixed;
+            top: 30px;
+            right: 30px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+            backdrop-filter: blur(25px);
+            padding: 15px 28px;
+            border-radius: 35px;
+            cursor: pointer;
+            transition: all 0.4s ease;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            z-index: 1000;
+            font-weight: 700;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .language-toggle:hover {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.1));
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .status-item {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+            backdrop-filter: blur(25px);
+            padding: 30px;
+            border-radius: 25px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .status-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(79, 172, 254, 0.1), transparent);
+            transition: left 0.6s;
+        }
+
+        .status-item:hover::before {
+            left: 100%;
+        }
+
+        .status-item:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08));
+        }
+
+        .status-number {
+            font-size: 2.8rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(79, 172, 254, 0.3);
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chat-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 25px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 25px;
+            gap: 15px;
+        }
+
+        .chat-header h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .messages {
+            height: 400px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            scroll-behavior: smooth;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 15px 20px;
+            border-radius: 18px;
+            animation: messageSlide 0.4s ease-out;
+            word-wrap: break-word;
+            line-height: 1.5;
+            max-width: 85%;
+            position: relative;
+        }
+
+        .user-message {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            margin-left: auto;
+            margin-right: 0;
+            border-bottom-right-radius: 5px;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .assistant-message {
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+            margin-right: auto;
+            margin-left: 0;
+            border-bottom-left-radius: 5px;
+            box-shadow: 0 5px 15px rgba(17, 153, 142, 0.3);
+        }
+
+        .input-container {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 20px 28px;
+            border: none;
+            border-radius: 30px;
+            font-size: 16px;
+            outline: none;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.85));
+            color: #1a1a2e;
+            transition: all 0.4s ease;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.1);
+            font-weight: 500;
+        }
+
+        .chat-input:focus {
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 0 0 4px rgba(79, 172, 254, 0.3), inset 0 2px 10px rgba(0, 0, 0, 0.1);
+            transform: scale(1.02);
+            border-color: rgba(79, 172, 254, 0.6);
+        }
+
+        .send-btn {
+            padding: 18px 25px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            min-width: 120px;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .devices-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 25px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .devices-section h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 25px;
+        }
+
+        .device-category {
+            margin-bottom: 30px;
+        }
+
+        .category-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .device-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 20px;
+        }
+
+        .device-card {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+            backdrop-filter: blur(15px);
+            border-radius: 25px;
+            padding: 25px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.5s ease;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .device-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+            transition: left 0.8s;
+        }
+
+        .device-card:hover::before {
+            left: 100%;
+        }
+
+        .device-card:hover {
+            transform: translateY(-10px) scale(1.03);
+            border-color: rgba(79, 172, 254, 0.6);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .device-card:hover .device-icon {
+            transform: scale(1.1) rotate(5deg);
+            filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4));
+        }
+
+        .device-card.on {
+            background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
+            box-shadow: 0 20px 40px rgba(255, 107, 107, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 107, 107, 0.6);
+        }
+
+        .device-card.on:hover {
+            box-shadow: 0 30px 60px rgba(255, 107, 107, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        }
+
+        .device-card.off {
+            background: linear-gradient(145deg, rgba(107, 114, 128, 0.4), rgba(75, 85, 99, 0.3));
+            border-color: rgba(156, 163, 175, 0.4);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .device-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+        }
+
+        .device-name {
+            font-weight: 700;
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+        }
+
+        .device-status {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            font-weight: 500;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .quick-action {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+            backdrop-filter: blur(25px);
+            border-radius: 25px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.5s ease;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .quick-action::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: radial-gradient(circle, rgba(79, 172, 254, 0.15) 0%, transparent 70%);
+            transition: all 0.6s ease;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+        }
+
+        .quick-action:hover::before {
+            width: 400px;
+            height: 400px;
+        }
+
+        .quick-action:hover {
+            transform: translateY(-8px) scale(1.02);
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08));
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            border-color: rgba(79, 172, 254, 0.4);
+        }
+
+        .quick-action:hover .quick-action-icon {
+            transform: scale(1.15) rotate(-5deg);
+            filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.4));
+        }
+
+        .quick-action-icon {
+            font-size: 3rem;
+            margin-bottom: 18px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.4s ease;
+        }
+
+        .quick-action h3 {
+            font-weight: 700;
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+        }
+
+        .quick-action p {
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+
+        .messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .messages::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .messages::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            border-radius: 4px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .messages::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #00f2fe, #4facfe);
+        }
+
+        .loading {
+            animation: pulse 2s infinite;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            .header h1 {
+                font-size: 2.5rem;
+            }
+
+            .main-content {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .language-toggle {
+                position: static;
+                margin: 0 auto 20px;
+                display: inline-block;
+            }
+
+            .quick-actions {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="background-pattern"></div>
+
+    <div class="language-toggle" onclick="toggleLanguage()">
+        🌍 <span id="language-label">English</span>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🏠 Smart Home Assistant</h1>
+            <p>Multilingual AI-Powered Home Control • Real Backend Integration</p>
+            <div id="connection-status" class="connection-status error">🔴 Connecting...</div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-number" id="total-devices">-</div>
+                <div>Total Devices</div>
+            </div>
+            <div class="status-item">
+                <div class="status-number" id="active-devices">-</div>
+                <div>Active</div>
+            </div>
+            <div class="status-item">
+                <div class="status-number">🌍</div>
+                <div>Multilingual</div>
+            </div>
+            <div class="status-item">
+                <div class="status-number">🎤</div>
+                <div>Voice Ready</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="chat-section">
+                <div class="chat-header">
+                    <h2>💬 AI Assistant</h2>
+                    <span style="opacity: 0.8;">English + Persian</span>
+                </div>
+
+                <div id="messages" class="messages">
+                    <div class="message assistant-message">
+                        <strong>🤖 Assistant:</strong> Hello! I'm your smart home assistant. I speak English and Persian. Try commands like "Turn on kitchen lamp" or "چراغ آشپزخانه را روشن کن"
+                    </div>
+                </div>
+
+                <div class="input-container">
+                    <input type="text" id="chatInput" class="chat-input" placeholder="Type your command... / دستور خود را تایپ کنید..." />
+                    <button id="sendBtn" class="send-btn" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+
+            <div class="devices-section">
+                <h2>📱 Device Control</h2>
+
+                <div class="device-category">
+                    <div class="category-title">💡 Smart Lamps</div>
+                    <div class="device-grid" id="lamps-grid">
+                        <div class="loading" style="padding: 20px; text-align: center; opacity: 0.7;">Loading devices...</div>
+                    </div>
+                </div>
+
+                <div class="device-category">
+                    <div class="category-title">❄️ Air Conditioners</div>
+                    <div class="device-grid" id="acs-grid">
+                        <div class="loading" style="padding: 20px; text-align: center; opacity: 0.7;">Loading devices...</div>
+                    </div>
+                </div>
+
+                <div class="device-category">
+                    <div class="category-title">📺 Entertainment</div>
+                    <div class="device-grid" id="tvs-grid">
+                        <div class="loading" style="padding: 20px; text-align: center; opacity: 0.7;">Loading devices...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="quick-actions">
+            <div class="quick-action" onclick="quickCommand('What time is it?')">
+                <div class="quick-action-icon">🕒</div>
+                <h3>Current Time</h3>
+                <p>Get current date and time</p>
+            </div>
+            <div class="quick-action" onclick="quickCommand('What\'s the weather?')">
+                <div class="quick-action-icon">🌤️</div>
+                <h3>Weather</h3>
+                <p>Check current weather conditions</p>
+            </div>
+            <div class="quick-action" onclick="quickCommand('Get technology news')">
+                <div class="quick-action-icon">📰</div>
+                <h3>Latest News</h3>
+                <p>Technology headlines and updates</p>
+            </div>
+            <div class="quick-action" onclick="quickCommand('Show device status')">
+                <div class="quick-action-icon">📊</div>
+                <h3>Device Status</h3>
+                <p>Check all smart home devices</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let currentLanguage = 'en';
+
+        // Test API connection
+        async function testConnection() {
+            try {
+                const response = await fetch(`${API_BASE}/`);
+                if (response.ok) {
+                    const data = await response.json();
+                    updateConnectionStatus(true);
+                    loadDevices();
+                } else {
+                    throw new Error('API not responding');
+                }
+            } catch (error) {
+                updateConnectionStatus(false, error.message);
+            }
+        }
+
+        function updateConnectionStatus(connected, errorMessage = '') {
+            const statusEl = document.getElementById('connection-status');
+            if (connected) {
+                statusEl.textContent = '🟢 Connected';
+                statusEl.className = 'connection-status connected';
+            } else {
+                statusEl.textContent = `🔴 ${errorMessage || 'Disconnected'}`;
+                statusEl.className = 'connection-status error';
+            }
+        }
+
+        // Load devices from API
+        async function loadDevices() {
+            try {
+                const response = await fetch(`${API_BASE}/api/devices`);
+                const devices = await response.json();
+
+                updateDeviceGrid('lamps-grid', devices.lamps || [], '💡');
+                updateDeviceGrid('acs-grid', devices.acs || [], '❄️');
+                updateDeviceGrid('tvs-grid', devices.tvs || [], '📺');
+
+                const totalDevices = (devices.lamps?.length || 0) + (devices.acs?.length || 0) + (devices.tvs?.length || 0);
+                const activeDevices = [...(devices.lamps || []), ...(devices.acs || []), ...(devices.tvs || [])]
+                    .filter(device => device.power).length;
+
+                document.getElementById('total-devices').textContent = totalDevices;
+                document.getElementById('active-devices').textContent = activeDevices;
+
+            } catch (error) {
+                console.error('Failed to load devices:', error);
+            }
+        }
+
+        function updateDeviceGrid(gridId, devices, icon) {
+            const grid = document.getElementById(gridId);
+            grid.innerHTML = '';
+
+            if (devices.length === 0) {
+                grid.innerHTML = '<div style="padding: 20px; text-align: center; opacity: 0.7;">No devices found</div>';
+                return;
+            }
+
+            devices.forEach(device => {
+                const deviceCard = document.createElement('div');
+                deviceCard.className = `device-card ${device.power ? 'on' : 'off'}`;
+                deviceCard.onclick = () => toggleDevice(device.id);
+
+                let statusText = device.power ? 'ON' : 'OFF';
+                if (device.power && device.brightness !== undefined) {
+                    statusText += ` • ${device.brightness}% • ${device.color || 'White'}`;
+                } else if (device.power && device.temperature !== undefined) {
+                    statusText += ` • ${device.temperature}°C • ${device.mode || 'Cool'}`;
+                } else if (device.power && device.channel !== undefined) {
+                    statusText += ` • Ch ${device.channel} • Vol ${device.volume || 50}`;
+                }
+
+                deviceCard.innerHTML = `
+                    <div class="device-icon">${icon}</div>
+                    <div class="device-name">${device.location}</div>
+                    <div class="device-status">${statusText}</div>
+                `;
+
+                grid.appendChild(deviceCard);
+            });
+        }
+
+        // Send message to API
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            const sendBtn = document.getElementById('sendBtn');
+
+            if (!message) return;
+
+            addMessage(message, 'user');
+            input.value = '';
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Sending...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/command`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: message, language: currentLanguage })
+                });
+
+                const data = await response.json();
+                addMessage(data.response, 'assistant');
+
+                // Refresh devices if it was a device command
+                if (isDeviceCommand(message)) {
+                    setTimeout(loadDevices, 1000);
+                }
+
+            } catch (error) {
+                addMessage(`❌ Error: ${error.message}`, 'assistant');
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Send';
+            }
+        }
+
+        function isDeviceCommand(message) {
+            const deviceKeywords = ['turn', 'set', 'روشن', 'خاموش', 'تنظیم', 'lamp', 'چراغ', 'ac', 'کولر', 'tv', 'تلویزیون'];
+            return deviceKeywords.some(keyword => message.toLowerCase().includes(keyword));
+        }
+
+        // Add message to chat
+        function addMessage(text, sender) {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = `message ${sender}-message`;
+
+            const formattedText = text.replace(/\n/g, '<br>');
+            div.innerHTML = `<strong>${sender === 'user' ? '👤 You' : '🤖 Assistant'}:</strong> ${formattedText}`;
+
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        // Toggle device
+        async function toggleDevice(deviceId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/devices/${deviceId}/toggle`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    addMessage(result.message, 'assistant');
+                    setTimeout(loadDevices, 500);
+                }
+            } catch (error) {
+                console.error('Failed to toggle device:', error);
+            }
+        }
+
+        // Quick commands
+        function quickCommand(command) {
+            document.getElementById('chatInput').value = command;
+            sendMessage();
+        }
+
+        // Language toggle
+        function toggleLanguage() {
+            currentLanguage = currentLanguage === 'en' ? 'fa' : 'en';
+            document.getElementById('language-label').textContent = currentLanguage === 'en' ? 'English' : 'فارسی';
+
+            const input = document.getElementById('chatInput');
+            if (currentLanguage === 'fa') {
+                input.placeholder = 'دستور خود را تایپ کنید...';
+                input.style.direction = 'rtl';
+            } else {
+                input.placeholder = 'Type your command...';
+                input.style.direction = 'ltr';
+            }
+        }
+
+        // Event listeners
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // Initialize
+        testConnection();
+        setInterval(loadDevices, 30000); // Auto-refresh every 30 seconds
+    </script>
+</body>
+</html>
