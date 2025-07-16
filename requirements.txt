@@ -1,0 +1,66 @@
+# Smart Home Assistant - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# ================================
+# CORE DEPENDENCIES (Required)
+# ================================
+
+# Environment variables
+python-dotenv
+
+# LLM Service (Groq)
+groq
+
+# HTTP requests for APIs
+requests
+
+# Datetime utilities
+pytz
+
+# ================================
+# WEB API SERVER
+# ================================
+
+# FastAPI for REST API
+fastapi
+
+# ASGI server for FastAPI
+uvicorn[standard]
+
+# Request/Response models
+pydantic
+
+# ================================
+# VOICE INTERFACE
+# ================================
+
+# Speech-to-Text (Whisper)
+openai-whisper
+
+# Audio processing
+sounddevice
+numpy
+scipy
+
+# Text-to-Speech
+gtts
+
+# Audio playback
+pygame
+
+# ================================
+# SYSTEM AUDIO DEPENDENCIES
+# ================================
+# Note: You may need to install system-level audio packages:
+#
+# Ubuntu/Debian:
+#   sudo apt-get update
+#   sudo apt-get install portaudio19-dev python3-pyaudio
+#   sudo apt-get install ffmpeg
+#
+# macOS:
+#   brew install portaudio
+#   brew install ffmpeg
+#
+# Windows:
+#   Usually works out of the box with pip installs
