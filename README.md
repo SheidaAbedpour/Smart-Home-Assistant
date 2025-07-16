@@ -19,12 +19,14 @@ An intelligent, multilingual Smart Home Assistant that leverages **LLaMA 3.3 70B
 
 This Smart Home Assistant represents a comprehensive implementation of modern AI technologies for practical home automation. The system demonstrates how Large Language Models can be effectively integrated with real-world applications through function calling, voice processing, and multilingual support.
 
+![gif](https://github.com/SheidaAbedpour/Smart-Home-Assistant/blob/main/ui_run.gif)
+
+
 ### **🔬 Core Technologies**
 - **Large Language Model**: LLaMA 3.3 70B via Groq API for natural language understanding
 - **Function Calling Agent**: Custom-built agent that maps natural language to device actions
 - **Voice Processing**: OpenAI Whisper for speech-to-text and Google TTS for responses
 - **Multilingual AI**: Automatic language detection and Persian-English translation
-
 
 ### **🏆 Key Innovations**
 - **Seamless Bilingual Operation**: Natural conversation flow between English and Persian
